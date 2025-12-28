@@ -65,15 +65,25 @@ runs:
       if: inputs.preferred-seeds != ''
       shell: bash
       run: |
+        CONFIG_FILE="${RAD_HOME}/config.json"
+
+        # Build JSON array from comma-separated seeds
+        SEEDS_JSON="[]"
         IFS=',' read -ra SEEDS <<< "${{ inputs.preferred-seeds }}"
         for seed in "${SEEDS[@]}"; do
           seed=$(echo "$seed" | xargs)  # trim whitespace
           if [ -n "$seed" ]; then
             echo "Adding seed: $seed"
-            rad config --add preferredSeeds "$seed"
+            SEEDS_JSON=$(echo "$SEEDS_JSON" | jq --arg s "$seed" '. + [$s]')
           fi
         done
-        rad config
+
+        # Update config.json with preferred seeds
+        jq --argjson seeds "$SEEDS_JSON" '.preferredSeeds = $seeds' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
+        mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+
+        echo "Updated config:"
+        cat "$CONFIG_FILE"
 
     - name: Start Radicle Node
       shell: bash
