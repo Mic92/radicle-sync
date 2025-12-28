@@ -1,0 +1,131 @@
+name: 'Mirror to Radicle'
+description: 'A GitHub Action that mirrors your code to the Radicle peer-to-peer code hosting network.'
+inputs:
+  radicle-identity-passphrase:
+    description: 'The passphrase for the Radicle identity (base64 encoded).'
+    required: true
+    default: ''
+  radicle-identity-alias:
+    description: 'An alias for your Radicle identity.'
+    required: true
+    default: ''
+  radicle-identity-private-key:
+    description: 'The private key for the machine account (base64 encoded).'
+    required: true
+    default: ''
+  radicle-identity-public-key:
+    description: 'The public key for the machine account (base64 encoded).'
+    required: true
+    default: ''
+  radicle-repository-id:
+    description: 'The repository ID (rad:xxx).'
+    required: true
+    default: ''
+  radicle-project-name:
+    description: 'The project name from rad inspect --payload.'
+    required: true
+    default: ''
+  preferred-seeds:
+    description: 'Comma-separated list of preferred seeds (e.g., nid@host:port,nid@host:port).'
+    required: false
+    default: ''
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set GitHub Path
+      run: echo "$GITHUB_ACTION_PATH" >> $GITHUB_PATH
+      shell: bash
+      env:
+        GITHUB_ACTION_PATH: ${{ github.action_path }}
+
+    - name: Install radicle-cli
+      env:
+        RAD_HOME: ${{ github.workspace }}/.radicle
+      shell: bash
+      run: |
+        curl --show-error --silent --fail https://radicle.xyz/install | sh
+        echo "RAD_HOME=${{ github.workspace }}/.radicle" >> $GITHUB_ENV
+        echo "RAD_PASSPHRASE=" >> $GITHUB_ENV
+        echo "${RAD_HOME}/bin" >> $GITHUB_PATH
+
+    - name: Setup Radicle Identity
+      shell: bash
+      run: |
+        rad --version
+        rad config init --alias "${{ inputs.radicle-identity-alias }}"
+
+        echo "${{ inputs.radicle-identity-private-key }}" | base64 --decode > ${{ github.workspace }}/.radicle/keys/radicle
+        echo "${{ inputs.radicle-identity-public-key }}" | base64 --decode > ${{ github.workspace }}/.radicle/keys/radicle.pub
+        chmod 600 ${{ github.workspace }}/.radicle/keys/radicle
+
+        rad auth
+
+    - name: Configure Preferred Seeds
+      if: inputs.preferred-seeds != ''
+      shell: bash
+      run: |
+        IFS=',' read -ra SEEDS <<< "${{ inputs.preferred-seeds }}"
+        for seed in "${SEEDS[@]}"; do
+          seed=$(echo "$seed" | xargs)  # trim whitespace
+          if [ -n "$seed" ]; then
+            echo "Adding seed: $seed"
+            rad config --add preferredSeeds "$seed"
+          fi
+        done
+        rad config
+
+    - name: Start Radicle Node
+      shell: bash
+      run: |
+        rad node start
+
+        echo "Waiting for node to start..."
+        for i in {1..30}; do
+          if rad node status 2>/dev/null | grep -q "running"; then
+            echo "Node started"
+            break
+          fi
+          sleep 1
+        done
+
+    - name: Wait for Node to connect
+      shell: bash
+      run: |
+        echo "Waiting for node to connect to peers..."
+        for i in {1..60}; do
+          if rad node status 2>&1 | grep -q "✓"; then
+            echo "Connected to peers"
+            rad node status
+            break
+          fi
+          echo -n "."
+          sleep 1
+        done
+        echo ""
+
+    - name: Clone from Radicle
+      shell: bash
+      run: |
+        rad clone "${{ inputs.radicle-repository-id }}" --no-confirm --timeout 180
+
+    - name: Fetch code from GitHub
+      shell: bash
+      working-directory: ${{ github.workspace }}/${{ inputs.radicle-project-name }}
+      run: |
+        export GH_REPO_URL=$(echo "${{ github.repositoryUrl }}" | sed -e 's/git:\/\//https:\/\//g')
+
+        git remote add github ${GH_REPO_URL}
+        git fetch --all
+        git checkout -b github/${{ github.ref_name }} --track github/${{ github.ref_name }}
+
+    - name: Push to Radicle Network
+      shell: bash
+      working-directory: ${{ github.workspace }}/${{ inputs.radicle-project-name }}
+      run: |
+        git push --force rad github/${{ github.ref_name }}:${{ github.ref_name }}
+
+        echo "Syncing with the network..."
+        rad sync --announce --timeout 60 || true
+
+        rad node stop
