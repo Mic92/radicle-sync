@@ -82,37 +82,27 @@ runs:
         jq --argjson seeds "$SEEDS_JSON" '.preferredSeeds = $seeds' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
         mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
 
-        echo "Updated config:"
-        cat "$CONFIG_FILE"
-
     - name: Start Radicle Node
       shell: bash
       run: |
+        rad self
         rad node start
-
-        echo "Waiting for node to start..."
-        for i in {1..30}; do
-          if rad node status 2>/dev/null | grep -q "running"; then
-            echo "Node started"
-            break
-          fi
-          sleep 1
-        done
+        # Give node time to initialize
+        sleep 3
 
     - name: Wait for Node to connect
       shell: bash
       run: |
         echo "Waiting for node to connect to peers..."
-        for i in {1..60}; do
-          if rad node status 2>&1 | grep -q "✓"; then
-            echo "Connected to peers"
+        for i in {1..30}; do
+          if rad node status 2>/dev/null | grep -q "✓"; then
+            echo "Node connected"
             rad node status
             break
           fi
-          echo -n "."
-          sleep 1
+          sleep 2
+          echo "Waiting... (attempt $i/30)"
         done
-        echo ""
 
     - name: Clone from Radicle
       shell: bash
