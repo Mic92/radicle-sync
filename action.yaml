@@ -82,6 +82,13 @@ runs:
         jq --argjson seeds "$SEEDS_JSON" '.preferredSeeds = $seeds' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
         mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
 
+    - name: Restore Radicle Storage Cache
+      uses: actions/cache/restore@v4
+      id: cache-radicle
+      with:
+        path: ${{ github.workspace }}/.radicle/storage
+        key: radicle-storage-${{ inputs.radicle-repository-id }}-v2
+
     - name: Start Radicle Node
       shell: bash
       run: |
@@ -90,42 +97,82 @@ runs:
         # Give node time to initialize
         sleep 3
 
-    - name: Wait for Node to connect
+    - name: Fetch Radicle Repository into Storage
       shell: bash
       run: |
-        echo "Waiting for node to connect to peers..."
-        for i in {1..30}; do
-          if rad node status 2>/dev/null | grep -q "✓"; then
-            echo "Node connected"
-            rad node status
-            break
-          fi
-          sleep 2
-          echo "Waiting... (attempt $i/30)"
-        done
+        # Seed the repository first (required before fetch)
+        rad seed "${{ inputs.radicle-repository-id }}" --scope all
+        rad sync --fetch "${{ inputs.radicle-repository-id }}" --timeout 180
 
-    - name: Clone from Radicle
+    - name: Clone from GitHub and Connect to Radicle
       shell: bash
-      run: |
-        rad clone "${{ inputs.radicle-repository-id }}" --no-confirm --timeout 180
-
-    - name: Fetch code from GitHub
-      shell: bash
-      working-directory: ${{ github.workspace }}/${{ inputs.radicle-project-name }}
       run: |
         export GH_REPO_URL=$(echo "${{ github.repositoryUrl }}" | sed -e 's/git:\/\//https:\/\//g')
+        git clone ${GH_REPO_URL} ${{ inputs.radicle-project-name }}
+        cd ${{ inputs.radicle-project-name }}
 
-        git remote add github ${GH_REPO_URL}
-        git fetch --all
-        git checkout -b github/${{ github.ref_name }} --track github/${{ github.ref_name }}
+        # Connect to the Radicle repository in storage
+        rad init --existing "${{ inputs.radicle-repository-id }}" --no-confirm
 
-    - name: Push to Radicle Network
+    - name: Sync Between GitHub and Radicle
       shell: bash
       working-directory: ${{ github.workspace }}/${{ inputs.radicle-project-name }}
       run: |
-        git push --force rad github/${{ github.ref_name }}:${{ github.ref_name }}
+        # Fetch from Radicle to see current state
+        git fetch rad ${{ github.ref_name }} 2>/dev/null || echo "Branch doesn't exist on Radicle yet"
+
+        # Check if Radicle has commits not in GitHub
+        if git rev-parse --verify rad/${{ github.ref_name }} >/dev/null 2>&1; then
+          RADICLE_COMMITS=$(git rev-list HEAD..rad/${{ github.ref_name }} --count)
+        else
+          RADICLE_COMMITS=0
+        fi
+
+        if [ "$RADICLE_COMMITS" -eq 0 ]; then
+          # Simple case: Radicle has no new commits, just push GitHub → Radicle
+          echo "No new commits on Radicle, pushing GitHub changes..."
+          git push rad HEAD:${{ github.ref_name }}
+        else
+          # Radicle has new commits, create PR to bring them into GitHub
+          echo "Radicle has $RADICLE_COMMITS new commit(s), creating PR..."
+
+          BRANCH_NAME="radicle-sync/${{ github.ref_name }}"
+          git checkout -b "$BRANCH_NAME"
+
+          if git merge --no-edit rad/${{ github.ref_name }}; then
+            echo "Merge successful, creating PR..."
+            git push --force origin "$BRANCH_NAME"
+
+            gh pr create \
+              --title "Sync changes from Radicle to ${{ github.ref_name }}" \
+              --body "This PR contains changes that were contributed to Radicle.\n\nMerge this PR to sync them back to GitHub." \
+              --base ${{ github.ref_name }} \
+              --head "$BRANCH_NAME" 2>/dev/null || echo "PR already exists"
+          else
+            # Merge failed due to conflicts
+            echo "::error::Merge conflict detected between GitHub and Radicle."
+            git merge --abort
+            git merge --no-edit rad/${{ github.ref_name }} || true
+            git push --force origin "$BRANCH_NAME"
+
+            gh pr create \
+              --title "Sync changes from Radicle to ${{ github.ref_name }}" \
+              --body "⚠️ **Merge conflict detected**\n\nThis PR contains changes from Radicle that conflict with GitHub. Please resolve conflicts manually." \
+              --base ${{ github.ref_name }} \
+              --head "$BRANCH_NAME" 2>/dev/null || echo "PR already exists"
+
+            exit 1
+          fi
+        fi
 
         echo "Syncing with the network..."
         rad sync --announce --timeout 60 || true
 
         rad node stop
+
+    - name: Save Radicle Storage Cache
+      uses: actions/cache/save@v4
+      if: always() && steps.cache-radicle.outputs.cache-hit != 'true'
+      with:
+        path: ${{ github.workspace }}/.radicle/storage
+        key: radicle-storage-${{ inputs.radicle-repository-id }}-v2
