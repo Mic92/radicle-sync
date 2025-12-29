@@ -1,6 +1,6 @@
-# Mirror to Radicle
+# Radicle Sync
 
-A GitHub Action that mirrors your code to the Radicle peer-to-peer code hosting network.
+A GitHub Action that bidirectionally syncs your code with the Radicle peer-to-peer code hosting network.
 
 ## Features
 
@@ -13,7 +13,7 @@ A GitHub Action that mirrors your code to the Radicle peer-to-peer code hosting 
 ## Usage
 
 ```yaml
-name: Mirror to Radicle
+name: Radicle Sync
 
 on:
   push:
@@ -53,7 +53,7 @@ jobs:
     app-id: ${{ secrets.APP_ID }}
     private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-- uses: Mic92/mirror-to-radicle@main
+- uses: Mic92/radicle-sync@main
   with:
     github-token: ${{ steps.app-token.outputs.token }}
     # ... other inputs

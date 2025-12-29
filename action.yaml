@@ -1,5 +1,5 @@
-name: 'Mirror to Radicle'
-description: 'A GitHub Action that mirrors your code to the Radicle peer-to-peer code hosting network.'
+name: 'Radicle Sync'
+description: 'A GitHub Action that bidirectionally syncs your code with the Radicle peer-to-peer code hosting network.'
 inputs:
   radicle-identity-passphrase:
     description: 'The passphrase for the Radicle identity (base64 encoded).'
