@@ -18,6 +18,9 @@ on:
   push:
     branches:
       - main
+  schedule:
+    # Run daily to check for Radicle contributions
+    - cron: '0 3 * * *'
   workflow_dispatch:
 
 jobs:
