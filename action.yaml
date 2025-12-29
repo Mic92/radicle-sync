@@ -165,7 +165,9 @@ runs:
             else
               gh pr create \
                 --title "Sync changes from Radicle to ${{ github.ref_name }}" \
-                --body "This PR contains changes that were contributed to Radicle.\n\nMerge this PR to sync them back to GitHub." \
+                --body "This PR contains changes that were contributed to Radicle.
+
+Merge this PR to sync them back to GitHub." \
                 --base ${{ github.ref_name }} \
                 --head "$BRANCH_NAME"
             fi
@@ -182,7 +184,9 @@ runs:
             else
               gh pr create \
                 --title "Sync changes from Radicle to ${{ github.ref_name }}" \
-                --body "⚠️ **Merge conflict detected**\n\nThis PR contains changes from Radicle that conflict with GitHub. Please resolve conflicts manually." \
+                --body "⚠️ **Merge conflict detected**
+
+This PR contains changes from Radicle that conflict with GitHub. Please resolve conflicts manually." \
                 --base ${{ github.ref_name }} \
                 --head "$BRANCH_NAME"
             fi
