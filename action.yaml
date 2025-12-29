@@ -131,6 +131,8 @@ runs:
     - name: Sync Between GitHub and Radicle
       shell: bash
       working-directory: ${{ github.workspace }}/${{ inputs.radicle-project-name }}
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         # Fetch from Radicle to see current state
         git fetch rad ${{ github.ref_name }} 2>/dev/null || echo "Branch doesn't exist on Radicle yet"
