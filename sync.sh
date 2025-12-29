@@ -70,7 +70,6 @@ rad seed "$RADICLE_REPOSITORY_ID" --scope all
 
 # Check if repository actually exists in storage
 REPO_STORAGE_PATH="${RAD_HOME}/storage/${RADICLE_REPOSITORY_ID#rad:}"
-FETCH_SUCCESS=false
 
 if [ "$CACHE_HIT" == "true" ] && [ -d "$REPO_STORAGE_PATH" ]; then
   echo "Repository found in cache, syncing updates..."
@@ -78,19 +77,15 @@ else
   echo "No valid cache, fetching from Radicle network..."
 fi
 
-if rad sync --fetch "$RADICLE_REPOSITORY_ID" --timeout 180 2>&1 | tee /tmp/rad-fetch.log; then
-  FETCH_SUCCESS=true
-else
-  echo "Fetch via rad sync failed, trying rad clone..."
-  if rad clone "$RADICLE_REPOSITORY_ID" --no-confirm 2>&1 | tee /tmp/rad-clone.log; then
-    FETCH_SUCCESS=true
-    # rad clone creates a directory, but we want to use our GitHub clone, so remove it
-    rm -rf "$RADICLE_PROJECT_NAME"
-  fi
-fi
+# Try to fetch - rad sync may return non-zero even on partial success
+rad sync --fetch "$RADICLE_REPOSITORY_ID" --timeout 180 || true
 
-if [ "$FETCH_SUCCESS" = false ]; then
-  echo "::warning::Could not fetch repository from Radicle network."
+# If fetch didn't work, try rad clone
+if [ ! -d "$REPO_STORAGE_PATH" ]; then
+  echo "Fetch via rad sync didn't populate storage, trying rad clone..."
+  rad clone "$RADICLE_REPOSITORY_ID" --no-confirm || true
+  # rad clone creates a directory, but we want to use our GitHub clone, so remove it
+  rm -rf "$RADICLE_PROJECT_NAME" 2>/dev/null || true
 fi
 endgroup
 
