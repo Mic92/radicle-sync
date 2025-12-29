@@ -42,8 +42,8 @@ echo "::group::Fetch Radicle Repository"
 REPO_STORAGE_PATH="${RAD_HOME}/storage/${RADICLE_REPOSITORY_ID#rad:}"
 rad seed "$RADICLE_REPOSITORY_ID" --scope all
 
-for attempt in 1 2 3 4 5; do
-  echo "Fetch attempt $attempt/5..."
+for attempt in $(seq 1 10); do
+  echo "Fetch attempt $attempt/10..."
   rad sync --fetch "$RADICLE_REPOSITORY_ID" --timeout 30 || true
   [ -d "$REPO_STORAGE_PATH" ] && break
   sleep 5
