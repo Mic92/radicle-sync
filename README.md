@@ -91,10 +91,6 @@ This action mirrors your GitHub repository to the Radicle network:
 
 This ensures that contributions made directly to Radicle are preserved and properly reviewed.
 
-## Setup
-
-See [gh-radicle](https://github.com/Mic92/dotfiles/tree/main/pkgs/gh-radicle) for a tool that automates the setup of GitHub secrets and workflow files.
-
 ## Learn More
 
 - [Radicle Website](https://radicle.xyz)
