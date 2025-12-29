@@ -71,11 +71,17 @@ steps:
 | `radicle-identity-public-key` | Public key (base64 encoded) | Yes | |
 | `radicle-repository-id` | Repository ID (rad:xxx) | Yes | |
 | `radicle-project-name` | Project name | Yes | |
-| `preferred-seeds` | Comma-separated list of preferred seeds | No | |
+| `preferred-seeds` | Comma-separated list of preferred seeds (recommended) | No | |
 | `git-user-name` | Git user name for merge commits | No | `Radicle Mirror Bot` |
 | `git-user-email` | Git user email for merge commits | No | `radicle-mirror@users.noreply.github.com` |
 | `pr-labels` | Comma-separated list of labels for PRs | No | |
 | `github-token` | GitHub token for authentication | No | `${{ github.token }}` |
+
+**Recommended: Use Your Own Seed**
+
+For reliable syncing, we recommend running your own Radicle seed node and configuring it as a preferred seed. Public seeds may be slow to respond or temporarily unavailable, which can cause sync failures. Your repository must be seeded on the preferred seed before the action can fetch it.
+
+To set up your own seed, see the [Radicle seed documentation](https://docs.radicle.xyz/guides/seeder).
 
 ## Setup Tutorial
 
