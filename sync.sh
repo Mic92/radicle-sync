@@ -3,14 +3,12 @@ set -euo pipefail
 
 export RAD_HOME="${GITHUB_WORKSPACE}/.radicle"
 export RAD_PASSPHRASE=""
+export PATH="$HOME/.radicle/bin:$PATH"
 
 # Install Radicle CLI
 echo "::group::Install Radicle CLI"
-if command -v rad >/dev/null 2>&1; then
-  echo "Radicle CLI already available"
-else
+if ! command -v rad >/dev/null 2>&1; then
   curl --show-error --silent --fail https://radicle.xyz/install | sh
-  export PATH="$HOME/.radicle/bin:$PATH"
 fi
 rad --version
 echo "::endgroup::"
