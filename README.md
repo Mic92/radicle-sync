@@ -31,8 +31,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - id: mirror
-        uses: Mic92/mirror-to-radicle@main
+      - uses: Mic92/radicle-sync@main
         with:
           radicle-identity-alias: "${{ secrets.RADICLE_IDENTITY_ALIAS }}"
           radicle-identity-passphrase: "${{ secrets.RADICLE_IDENTITY_PASSPHRASE }}"
@@ -45,20 +44,21 @@ jobs:
 
 **Note**: The workflow requires `contents: write` permission to push branches and `pull-requests: write` to create PRs when Radicle has contributions.
 
-**Tip**: By default, PRs created by `GITHUB_TOKEN` don't trigger workflows. To trigger workflows on sync PRs, use a GitHub App token:
+**Optional - Trigger Workflows on PRs**: By default, PRs created by `GITHUB_TOKEN` don't trigger workflows. To enable this, use a GitHub App token:
 
 ```yaml
-- name: Generate GitHub App Token
-  id: app-token
-  uses: actions/create-github-app-token@v2
-  with:
-    app-id: ${{ secrets.APP_ID }}
-    private-key: ${{ secrets.APP_PRIVATE_KEY }}
+steps:
+  - name: Generate GitHub App Token
+    id: app-token
+    uses: actions/create-github-app-token@v2
+    with:
+      app-id: ${{ secrets.APP_ID }}
+      private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-- uses: Mic92/radicle-sync@main
-  with:
-    github-token: ${{ steps.app-token.outputs.token }}
-    # ... other inputs
+  - uses: Mic92/radicle-sync@main
+    with:
+      github-token: ${{ steps.app-token.outputs.token }}
+      # ... other inputs
 ```
 
 ## Inputs
@@ -76,6 +76,140 @@ jobs:
 | `git-user-email` | Git user email for merge commits | No | `radicle-mirror@users.noreply.github.com` |
 | `pr-labels` | Comma-separated list of labels for PRs | No | |
 | `github-token` | GitHub token for authentication | No | `${{ github.token }}` |
+
+## Setup Tutorial
+
+### Step 1: Create a Radicle Identity for GitHub Actions
+
+On your local machine, create a new Radicle identity for GitHub Actions:
+
+```bash
+# Create a persistent directory for the GitHub Actions identity
+mkdir -p ~/.radicle-github-actions
+export RAD_HOME="$HOME/.radicle-github-actions"
+export RAD_PASSPHRASE=""
+
+# Create the identity (empty passphrase via stdin)
+rad auth --alias "github-actions-bot" --stdin < /dev/null
+
+# Get the DID
+DID=$(rad self --did)
+echo "Machine DID: $DID"
+
+# Export the keys as base64 (you'll need these for GitHub secrets)
+echo "Private key (base64):"
+base64 < "$RAD_HOME/keys/radicle"
+
+echo "Public key (base64):"
+base64 < "$RAD_HOME/keys/radicle.pub"
+
+echo "Passphrase (base64 empty string):"
+echo -n "" | base64
+
+echo ""
+echo "Keys are saved in: $RAD_HOME/keys"
+echo "IMPORTANT: Back up this directory! GitHub secrets cannot be read back once set."
+```
+
+**Important**: Keep the `~/.radicle-github-actions` directory backed up somewhere safe. You'll need it if you ever need to recreate the secrets or perform manual Radicle operations with this identity.
+
+Now, back in your **main** Radicle identity, add the machine identity as a delegate:
+
+```bash
+# Switch back to your main identity
+unset RAD_HOME
+
+# In your repository, add the GitHub Actions identity as a delegate
+rad id update --title "Add GitHub Actions mirror account" \
+  --description "Machine account for GitHub Actions mirroring" \
+  --delegate "$DID" --threshold 1
+
+# Sync to network
+rad sync --announce
+```
+
+### Step 2: Initialize or Get Your Radicle Repository
+
+If you haven't already published your repository to Radicle:
+
+```bash
+# In your repository
+rad init --name "my-project" --description "My awesome project"
+```
+
+Get the repository information:
+
+```bash
+# Get the repository ID (rad:xxx)
+rad inspect
+
+# Get the project name
+rad inspect --payload | jq -r '.xyz.radicle.project.name'
+```
+
+### Step 3: Set Up GitHub Secrets
+
+**Option A: Using GitHub CLI (gh)**
+
+```bash
+# First, create the 'radicle' environment
+gh api repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/environments/radicle -X PUT
+
+# Set environment secrets (identity-related)
+export RAD_HOME="$HOME/.radicle-github-actions"
+gh secret set RADICLE_IDENTITY_ALIAS --env radicle -b "github-actions-bot"
+gh secret set RADICLE_IDENTITY_PASSPHRASE --env radicle < <(echo -n "" | base64)
+gh secret set RADICLE_IDENTITY_PRIVATE_KEY --env radicle < <(base64 < "$RAD_HOME/keys/radicle")
+gh secret set RADICLE_IDENTITY_PUBLIC_KEY --env radicle < <(base64 < "$RAD_HOME/keys/radicle.pub")
+
+# Set repository secrets (project info)
+unset RAD_HOME  # Use main identity
+gh secret set RADICLE_PROJECT_NAME -b "$(rad inspect --payload | jq -r '.xyz.radicle.project.name')"
+gh secret set RADICLE_REPOSITORY_ID -b "$(rad inspect)"
+
+# Verify secrets were created
+gh secret list
+```
+
+**Note**: GitHub secrets cannot be read back once set for security reasons. You can only verify they exist with `gh secret list`.
+
+**Option B: Using GitHub Web UI**
+
+First, create the "radicle" environment at **Settings → Environments → New environment**.
+
+Then add these **Environment secrets** (under the "radicle" environment):
+
+| Secret | Value |
+|--------|-------|
+| `RADICLE_IDENTITY_ALIAS` | `github-actions-bot` |
+| `RADICLE_IDENTITY_PASSPHRASE` | Base64 empty string (from Step 1) |
+| `RADICLE_IDENTITY_PRIVATE_KEY` | Base64 private key from Step 1 |
+| `RADICLE_IDENTITY_PUBLIC_KEY` | Base64 public key from Step 1 |
+
+And these **Repository secrets** (under Actions secrets):
+
+| Secret | Value |
+|--------|-------|
+| `RADICLE_PROJECT_NAME` | Project name from Step 2 |
+| `RADICLE_REPOSITORY_ID` | Repository ID (rad:xxx) from Step 2 |
+
+### Step 4 (Optional): Set Up GitHub App for Workflow Triggers
+
+If you want PRs from Radicle to trigger your CI workflows:
+
+1. Create a GitHub App at **Settings → Developer settings → GitHub Apps → New GitHub App**
+2. Set permissions: **Contents** (Read & Write), **Pull Requests** (Read & Write)
+3. Generate a private key and save it
+4. Install the app on your repository
+5. Add these secrets:
+   - `APP_ID` - Your GitHub App ID
+   - `APP_PRIVATE_KEY` - The private key
+
+Then use the GitHub App token in your workflow (see example in [Usage](#usage) section).
+
+### Step 5: Create the Workflow
+
+Create `.github/workflows/radicle.yaml` with the example from the [Usage](#usage) section.
 
 ## How it Works
 
