@@ -43,6 +43,22 @@ jobs:
 
 **Note**: The workflow requires `contents: write` permission to push branches and `pull-requests: write` to create PRs when Radicle has contributions.
 
+**Tip**: By default, PRs created by `GITHUB_TOKEN` don't trigger workflows. To trigger workflows on sync PRs, use a GitHub App token:
+
+```yaml
+- name: Generate GitHub App Token
+  id: app-token
+  uses: actions/create-github-app-token@v2
+  with:
+    app-id: ${{ secrets.APP_ID }}
+    private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+- uses: Mic92/mirror-to-radicle@main
+  with:
+    github-token: ${{ steps.app-token.outputs.token }}
+    # ... other inputs
+```
+
 ## Inputs
 
 | Input | Description | Required | Default |
@@ -57,6 +73,7 @@ jobs:
 | `git-user-name` | Git user name for merge commits | No | `Radicle Mirror Bot` |
 | `git-user-email` | Git user email for merge commits | No | `radicle-mirror@users.noreply.github.com` |
 | `pr-labels` | Comma-separated list of labels for PRs | No | |
+| `github-token` | GitHub token for authentication | No | `${{ github.token }}` |
 
 ## How it Works
 

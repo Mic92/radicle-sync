@@ -41,6 +41,10 @@ inputs:
     description: 'Comma-separated list of labels to add to created PRs'
     required: false
     default: ''
+  github-token:
+    description: 'GitHub token for authentication (use GitHub App token to trigger workflows on created PRs)'
+    required: false
+    default: ${{ github.token }}
 
 runs:
   using: "composite"
@@ -119,7 +123,7 @@ runs:
     - name: Clone from GitHub and Connect to Radicle
       shell: bash
       env:
-        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
         # Clone with authentication using GITHUB_TOKEN
         git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git ${{ inputs.radicle-project-name }}
@@ -136,7 +140,7 @@ runs:
       shell: bash
       working-directory: ${{ github.workspace }}/${{ inputs.radicle-project-name }}
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
         # Fetch from Radicle to see current state
         git fetch rad ${{ github.ref_name }} 2>/dev/null || echo "Branch doesn't exist on Radicle yet"
