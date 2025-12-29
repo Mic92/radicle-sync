@@ -62,7 +62,6 @@ fi
 group "Start Radicle Node"
 rad self
 rad node start
-sleep 3
 endgroup
 
 # Fetch Radicle Repository into Storage
@@ -113,25 +112,18 @@ git config user.name "$GIT_USER_NAME"
 git config user.email "$GIT_USER_EMAIL"
 
 # Check if repository exists in storage
-if [ -d "$REPO_STORAGE_PATH" ]; then
-  echo "Repository found in storage, connecting to existing Radicle repository..."
-  echo -n "" | rad init --existing "$RADICLE_REPOSITORY_ID" --no-confirm
-else
-  echo "::warning::Repository not in storage. Initializing as new repository and pushing to network..."
-  # Initialize as a new repository from GitHub
-  echo -n "" | rad init --name "$RADICLE_PROJECT_NAME" --default-branch "$GITHUB_REF_NAME" --public --no-confirm
-
-  # Verify the RID matches what we expect
-  ACTUAL_RID=$(rad inspect)
-  if [ "$ACTUAL_RID" != "$RADICLE_REPOSITORY_ID" ]; then
-    echo "::error::Repository ID mismatch!"
-    echo "::error::Expected: $RADICLE_REPOSITORY_ID"
-    echo "::error::Got: $ACTUAL_RID"
-    echo "::error::This means the repository was not properly seeded on the network."
-    echo "::error::The repository needs to be initialized on Radicle first with the correct identity."
-    exit 1
-  fi
+if [ ! -d "$REPO_STORAGE_PATH" ]; then
+  echo "::error::Repository $RADICLE_REPOSITORY_ID not found in storage after fetch attempt."
+  echo "::error::Please ensure you have:"
+  echo "::error::  1. Initialized the repository on Radicle with 'rad init'"
+  echo "::error::  2. Added the GitHub Actions bot identity as a delegate"
+  echo "::error::  3. Synced to the network with 'rad sync --announce'"
+  echo "::error::See the tutorial in the README for detailed setup instructions."
+  exit 1
 fi
+
+echo "Repository found in storage, connecting to existing Radicle repository..."
+echo -n "" | rad init --existing "$RADICLE_REPOSITORY_ID" --no-confirm
 endgroup
 
 # Sync between GitHub and Radicle
