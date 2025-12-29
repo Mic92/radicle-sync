@@ -56,6 +56,7 @@ jobs:
 | `preferred-seeds` | Comma-separated list of preferred seeds | No | |
 | `git-user-name` | Git user name for merge commits | No | `Radicle Mirror Bot` |
 | `git-user-email` | Git user email for merge commits | No | `radicle-mirror@users.noreply.github.com` |
+| `pr-labels` | Comma-separated list of labels for PRs | No | |
 
 ## How it Works
 

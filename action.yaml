@@ -37,6 +37,10 @@ inputs:
     description: 'Git user email for merge commits'
     required: false
     default: 'radicle-mirror@users.noreply.github.com'
+  pr-labels:
+    description: 'Comma-separated list of labels to add to created PRs'
+    required: false
+    default: ''
 
 runs:
   using: "composite"
@@ -163,13 +167,18 @@ runs:
             if gh pr list --head "$BRANCH_NAME" --base "${{ github.ref_name }}" | grep -q .; then
               echo "PR already exists, updating it"
             else
-              gh pr create \
-                --title "Sync changes from Radicle to ${{ github.ref_name }}" \
+              PR_ARGS=(
+                --title "Sync changes from Radicle to ${{ github.ref_name }}"
                 --body "This PR contains changes that were contributed to Radicle.
 
-Merge this PR to sync them back to GitHub." \
-                --base ${{ github.ref_name }} \
+Merge this PR to sync them back to GitHub."
+                --base "${{ github.ref_name }}"
                 --head "$BRANCH_NAME"
+              )
+              if [ -n "${{ inputs.pr-labels }}" ]; then
+                PR_ARGS+=(--label "${{ inputs.pr-labels }}")
+              fi
+              gh pr create "${PR_ARGS[@]}"
             fi
           else
             # Merge failed due to conflicts
@@ -182,13 +191,18 @@ Merge this PR to sync them back to GitHub." \
             if gh pr list --head "$BRANCH_NAME" --base "${{ github.ref_name }}" | grep -q .; then
               echo "PR already exists, updating it"
             else
-              gh pr create \
-                --title "Sync changes from Radicle to ${{ github.ref_name }}" \
+              PR_ARGS=(
+                --title "Sync changes from Radicle to ${{ github.ref_name }}"
                 --body "⚠️ **Merge conflict detected**
 
-This PR contains changes from Radicle that conflict with GitHub. Please resolve conflicts manually." \
-                --base ${{ github.ref_name }} \
+This PR contains changes from Radicle that conflict with GitHub. Please resolve conflicts manually."
+                --base "${{ github.ref_name }}"
                 --head "$BRANCH_NAME"
+              )
+              if [ -n "${{ inputs.pr-labels }}" ]; then
+                PR_ARGS+=(--label "${{ inputs.pr-labels }}")
+              fi
+              gh pr create "${PR_ARGS[@]}"
             fi
 
             exit 1
