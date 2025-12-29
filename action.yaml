@@ -114,9 +114,11 @@ runs:
 
     - name: Clone from GitHub and Connect to Radicle
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
-        export GH_REPO_URL=$(echo "${{ github.repositoryUrl }}" | sed -e 's/git:\/\//https:\/\//g')
-        git clone ${GH_REPO_URL} ${{ inputs.radicle-project-name }}
+        # Clone with authentication using GITHUB_TOKEN
+        git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git ${{ inputs.radicle-project-name }}
         cd ${{ inputs.radicle-project-name }}
 
         # Configure git user for merge commits
