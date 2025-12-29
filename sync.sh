@@ -69,19 +69,29 @@ endgroup
 group "Fetch Radicle Repository into Storage"
 rad seed "$RADICLE_REPOSITORY_ID" --scope all
 
+# Check if repository actually exists in storage
+REPO_STORAGE_PATH="${RAD_HOME}/storage/${RADICLE_REPOSITORY_ID#rad:}"
 FETCH_SUCCESS=false
-if [ "$CACHE_HIT" == "true" ]; then
-  echo "Using cached Radicle storage, syncing updates..."
+
+if [ "$CACHE_HIT" == "true" ] && [ -d "$REPO_STORAGE_PATH" ]; then
+  echo "Repository found in cache, syncing updates..."
   if rad sync --fetch "$RADICLE_REPOSITORY_ID" --timeout 30; then
     FETCH_SUCCESS=true
+  else
+    echo "Cache sync failed, trying longer fetch..."
+    if rad sync --fetch "$RADICLE_REPOSITORY_ID" --timeout 180; then
+      FETCH_SUCCESS=true
+    fi
   fi
-else
-  echo "No cache, trying to fetch from Radicle network..."
+fi
+
+if [ "$FETCH_SUCCESS" = false ]; then
+  echo "No valid cache, trying to fetch from Radicle network..."
   if rad sync --fetch "$RADICLE_REPOSITORY_ID" --timeout 180 2>&1 | tee /tmp/rad-fetch.log; then
     FETCH_SUCCESS=true
   else
-    echo "Initial fetch via rad sync failed, trying rad clone..."
-    if rad clone "$RADICLE_REPOSITORY_ID" --no-confirm; then
+    echo "Fetch via rad sync failed, trying rad clone..."
+    if rad clone "$RADICLE_REPOSITORY_ID" --no-confirm 2>&1 | tee /tmp/rad-clone.log; then
       FETCH_SUCCESS=true
       # rad clone creates a directory, but we want to use our GitHub clone, so remove it
       rm -rf "$RADICLE_PROJECT_NAME"
@@ -103,16 +113,24 @@ git config user.name "$GIT_USER_NAME"
 git config user.email "$GIT_USER_EMAIL"
 
 # Check if repository exists in storage
-REPO_STORAGE_PATH="${RAD_HOME}/storage/${RADICLE_REPOSITORY_ID#rad:}"
 if [ -d "$REPO_STORAGE_PATH" ]; then
   echo "Repository found in storage, connecting to existing Radicle repository..."
   echo -n "" | rad init --existing "$RADICLE_REPOSITORY_ID" --no-confirm
 else
-  echo "::warning::Repository not found in storage. Attempting to connect anyway..."
-  echo -n "" | rad init --existing "$RADICLE_REPOSITORY_ID" --no-confirm || {
-    echo "::error::Failed to connect to Radicle repository. The repository may not be available on the network."
+  echo "::warning::Repository not in storage. Initializing as new repository and pushing to network..."
+  # Initialize as a new repository from GitHub
+  echo -n "" | rad init --name "$RADICLE_PROJECT_NAME" --default-branch "$GITHUB_REF_NAME" --public --no-confirm
+
+  # Verify the RID matches what we expect
+  ACTUAL_RID=$(rad inspect)
+  if [ "$ACTUAL_RID" != "$RADICLE_REPOSITORY_ID" ]; then
+    echo "::error::Repository ID mismatch!"
+    echo "::error::Expected: $RADICLE_REPOSITORY_ID"
+    echo "::error::Got: $ACTUAL_RID"
+    echo "::error::This means the repository was not properly seeded on the network."
+    echo "::error::The repository needs to be initialized on Radicle first with the correct identity."
     exit 1
-  }
+  fi
 fi
 endgroup
 
