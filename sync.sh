@@ -3,7 +3,7 @@ set -euo pipefail
 
 export RAD_HOME="${GITHUB_WORKSPACE}/.radicle"
 export RAD_PASSPHRASE=""
-export PATH="$HOME/.radicle/bin:$PATH"
+export PATH="${RAD_HOME}/bin:$PATH"
 
 # Install Radicle CLI
 echo "::group::Install Radicle CLI"
