@@ -1,6 +1,6 @@
 # Radicle Sync
 
-A GitHub Action that bidirectionally syncs your code with the Radicle peer-to-peer code hosting network.
+A GitHub Action that bidirectionally syncs your code with the [Radicle](https://radicle.xyz) peer-to-peer code hosting network.
 
 ## Features
 
@@ -94,3 +94,9 @@ This ensures that contributions made directly to Radicle are preserved and prope
 ## Setup
 
 See [gh-radicle](https://github.com/Mic92/dotfiles/tree/main/pkgs/gh-radicle) for a tool that automates the setup of GitHub secrets and workflow files.
+
+## Learn More
+
+- [Radicle Website](https://radicle.xyz)
+- [Radicle Documentation](https://docs.radicle.xyz)
+- [Get Started with Radicle](https://radicle.xyz/get-started)
