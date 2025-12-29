@@ -4,7 +4,6 @@ A GitHub Action that bidirectionally syncs your code with the Radicle peer-to-pe
 
 ## Features
 
-- Works on `ubuntu-slim` runners (no apt-get required)
 - Supports custom preferred seeds
 - Simple setup with GitHub secrets
 - Automatically creates PRs for contributions made to Radicle

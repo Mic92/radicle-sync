@@ -49,55 +49,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Set GitHub Path
-      run: echo "$GITHUB_ACTION_PATH" >> $GITHUB_PATH
-      shell: bash
-      env:
-        GITHUB_ACTION_PATH: ${{ github.action_path }}
-
-    - name: Install radicle-cli
-      env:
-        RAD_HOME: ${{ github.workspace }}/.radicle
-      shell: bash
-      run: |
-        curl --show-error --silent --fail https://radicle.xyz/install | sh
-        echo "RAD_HOME=${{ github.workspace }}/.radicle" >> $GITHUB_ENV
-        echo "RAD_PASSPHRASE=" >> $GITHUB_ENV
-        echo "${RAD_HOME}/bin" >> $GITHUB_PATH
-
-    - name: Setup Radicle Identity
-      shell: bash
-      run: |
-        rad --version
-        rad config init --alias "${{ inputs.radicle-identity-alias }}"
-
-        echo "${{ inputs.radicle-identity-private-key }}" | base64 --decode > ${{ github.workspace }}/.radicle/keys/radicle
-        echo "${{ inputs.radicle-identity-public-key }}" | base64 --decode > ${{ github.workspace }}/.radicle/keys/radicle.pub
-        chmod 600 ${{ github.workspace }}/.radicle/keys/radicle
-
-        rad auth
-
-    - name: Configure Preferred Seeds
-      if: inputs.preferred-seeds != ''
-      shell: bash
-      run: |
-        CONFIG_FILE="${RAD_HOME}/config.json"
-
-        # Build JSON array from comma-separated seeds
-        SEEDS_JSON="[]"
-        IFS=',' read -ra SEEDS <<< "${{ inputs.preferred-seeds }}"
-        for seed in "${SEEDS[@]}"; do
-          seed=$(echo "$seed" | xargs)  # trim whitespace
-          if [ -n "$seed" ]; then
-            echo "Adding seed: $seed"
-            SEEDS_JSON=$(echo "$SEEDS_JSON" | jq --arg s "$seed" '. + [$s]')
-          fi
-        done
-
-        # Update config.json with preferred seeds
-        jq --argjson seeds "$SEEDS_JSON" '.preferredSeeds = $seeds' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
-        mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
-
     - name: Restore Radicle Storage Cache
       uses: actions/cache/restore@v4
       id: cache-radicle
@@ -105,118 +56,25 @@ runs:
         path: ${{ github.workspace }}/.radicle/storage
         key: radicle-storage-${{ inputs.radicle-repository-id }}-v2
 
-    - name: Start Radicle Node
-      shell: bash
-      run: |
-        rad self
-        rad node start
-        # Give node time to initialize
-        sleep 3
-
-    - name: Fetch Radicle Repository into Storage
-      shell: bash
-      run: |
-        # Seed the repository first (required before fetch)
-        rad seed "${{ inputs.radicle-repository-id }}" --scope all
-        rad sync --fetch "${{ inputs.radicle-repository-id }}" --timeout 180
-
-    - name: Clone from GitHub and Connect to Radicle
+    - name: Run Sync Script
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
-      run: |
-        # Clone with authentication using GITHUB_TOKEN
-        git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git ${{ inputs.radicle-project-name }}
-        cd ${{ inputs.radicle-project-name }}
-
-        # Configure git user for merge commits
-        git config user.name "${{ inputs.git-user-name }}"
-        git config user.email "${{ inputs.git-user-email }}"
-
-        # Connect to the Radicle repository in storage
-        rad init --existing "${{ inputs.radicle-repository-id }}" --no-confirm
-
-    - name: Sync Between GitHub and Radicle
-      shell: bash
-      working-directory: ${{ github.workspace }}/${{ inputs.radicle-project-name }}
-      env:
         GH_TOKEN: ${{ inputs.github-token }}
+        RADICLE_IDENTITY_ALIAS: ${{ inputs.radicle-identity-alias }}
+        RADICLE_IDENTITY_PRIVATE_KEY: ${{ inputs.radicle-identity-private-key }}
+        RADICLE_IDENTITY_PUBLIC_KEY: ${{ inputs.radicle-identity-public-key }}
+        RADICLE_REPOSITORY_ID: ${{ inputs.radicle-repository-id }}
+        RADICLE_PROJECT_NAME: ${{ inputs.radicle-project-name }}
+        PREFERRED_SEEDS: ${{ inputs.preferred-seeds }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        CACHE_HIT: ${{ steps.cache-radicle.outputs.cache-hit }}
+        GIT_USER_NAME: ${{ inputs.git-user-name }}
+        GIT_USER_EMAIL: ${{ inputs.git-user-email }}
+        PR_LABELS: ${{ inputs.pr-labels }}
       run: |
-        # Fetch from Radicle to see current state
-        git fetch rad ${{ github.ref_name }} 2>/dev/null || echo "Branch doesn't exist on Radicle yet"
-
-        # Check if Radicle has commits not in GitHub
-        if git rev-parse --verify rad/${{ github.ref_name }} >/dev/null 2>&1; then
-          RADICLE_COMMITS=$(git rev-list HEAD..rad/${{ github.ref_name }} --count)
-        else
-          RADICLE_COMMITS=0
-        fi
-
-        if [ "$RADICLE_COMMITS" -eq 0 ]; then
-          # Simple case: Radicle has no new commits, just push GitHub → Radicle
-          echo "No new commits on Radicle, pushing GitHub changes..."
-          git push rad HEAD:${{ github.ref_name }}
-        else
-          # Radicle has new commits, create PR to bring them into GitHub
-          echo "Radicle has $RADICLE_COMMITS new commit(s), creating PR..."
-
-          BRANCH_NAME="radicle-sync/${{ github.ref_name }}"
-          git checkout -b "$BRANCH_NAME"
-
-          if git merge --no-edit rad/${{ github.ref_name }}; then
-            echo "Merge successful, creating PR..."
-            git push --force origin "$BRANCH_NAME"
-
-            # Check if PR already exists, create if not
-            if gh pr list --head "$BRANCH_NAME" --base "${{ github.ref_name }}" | grep -q .; then
-              echo "PR already exists, updating it"
-            else
-              PR_ARGS=(
-                --title "Sync changes from Radicle to ${{ github.ref_name }}"
-                --body "This PR contains changes that were contributed to Radicle.
-
-Merge this PR to sync them back to GitHub."
-                --base "${{ github.ref_name }}"
-                --head "$BRANCH_NAME"
-              )
-              if [ -n "${{ inputs.pr-labels }}" ]; then
-                PR_ARGS+=(--label "${{ inputs.pr-labels }}")
-              fi
-              gh pr create "${PR_ARGS[@]}"
-            fi
-          else
-            # Merge failed due to conflicts
-            echo "::error::Merge conflict detected between GitHub and Radicle."
-            git merge --abort
-            git merge --no-edit rad/${{ github.ref_name }} || true
-            git push --force origin "$BRANCH_NAME"
-
-            # Check if PR already exists, create if not
-            if gh pr list --head "$BRANCH_NAME" --base "${{ github.ref_name }}" | grep -q .; then
-              echo "PR already exists, updating it"
-            else
-              PR_ARGS=(
-                --title "Sync changes from Radicle to ${{ github.ref_name }}"
-                --body "⚠️ **Merge conflict detected**
-
-This PR contains changes from Radicle that conflict with GitHub. Please resolve conflicts manually."
-                --base "${{ github.ref_name }}"
-                --head "$BRANCH_NAME"
-              )
-              if [ -n "${{ inputs.pr-labels }}" ]; then
-                PR_ARGS+=(--label "${{ inputs.pr-labels }}")
-              fi
-              gh pr create "${PR_ARGS[@]}"
-            fi
-
-            exit 1
-          fi
-        fi
-
-        echo "Syncing with the network..."
-        rad sync --announce --timeout 60 || true
-
-        rad node stop
+        bash "${{ github.action_path }}/sync.sh"
 
     - name: Save Radicle Storage Cache
       uses: actions/cache/save@v4
