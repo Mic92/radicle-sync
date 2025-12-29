@@ -69,12 +69,28 @@ endgroup
 group "Fetch Radicle Repository into Storage"
 rad seed "$RADICLE_REPOSITORY_ID" --scope all
 
+FETCH_SUCCESS=false
 if [ "$CACHE_HIT" == "true" ]; then
   echo "Using cached Radicle storage, syncing updates..."
-  rad sync --fetch "$RADICLE_REPOSITORY_ID" --timeout 30 || echo "Sync timed out or failed"
+  if rad sync --fetch "$RADICLE_REPOSITORY_ID" --timeout 30; then
+    FETCH_SUCCESS=true
+  fi
 else
-  echo "No cache, fetching from Radicle network..."
-  rad sync --fetch "$RADICLE_REPOSITORY_ID" --timeout 180 || echo "Initial fetch failed or timed out"
+  echo "No cache, trying to fetch from Radicle network..."
+  if rad sync --fetch "$RADICLE_REPOSITORY_ID" --timeout 180 2>&1 | tee /tmp/rad-fetch.log; then
+    FETCH_SUCCESS=true
+  else
+    echo "Initial fetch via rad sync failed, trying rad clone..."
+    if rad clone "$RADICLE_REPOSITORY_ID" --no-confirm; then
+      FETCH_SUCCESS=true
+      # rad clone creates a directory, but we want to use our GitHub clone, so remove it
+      rm -rf "$RADICLE_PROJECT_NAME"
+    fi
+  fi
+fi
+
+if [ "$FETCH_SUCCESS" = false ]; then
+  echo "::warning::Could not fetch repository from Radicle network. Will try to initialize from GitHub."
 fi
 endgroup
 
@@ -86,7 +102,18 @@ cd "$RADICLE_PROJECT_NAME"
 git config user.name "$GIT_USER_NAME"
 git config user.email "$GIT_USER_EMAIL"
 
-rad init --existing "$RADICLE_REPOSITORY_ID" --no-confirm
+# Check if repository exists in storage
+REPO_STORAGE_PATH="${RAD_HOME}/storage/${RADICLE_REPOSITORY_ID#rad:}"
+if [ -d "$REPO_STORAGE_PATH" ]; then
+  echo "Repository found in storage, connecting to existing Radicle repository..."
+  echo -n "" | rad init --existing "$RADICLE_REPOSITORY_ID" --no-confirm
+else
+  echo "::warning::Repository not found in storage. Attempting to connect anyway..."
+  echo -n "" | rad init --existing "$RADICLE_REPOSITORY_ID" --no-confirm || {
+    echo "::error::Failed to connect to Radicle repository. The repository may not be available on the network."
+    exit 1
+  }
+fi
 endgroup
 
 # Sync between GitHub and Radicle
