@@ -45,15 +45,17 @@ jobs:
 
 ## Inputs
 
-| Input | Description | Required |
-|-------|-------------|----------|
-| `radicle-identity-alias` | Alias for your Radicle identity | Yes |
-| `radicle-identity-passphrase` | Passphrase for the identity (base64 encoded) | Yes |
-| `radicle-identity-private-key` | Private key (base64 encoded) | Yes |
-| `radicle-identity-public-key` | Public key (base64 encoded) | Yes |
-| `radicle-repository-id` | Repository ID (rad:xxx) | Yes |
-| `radicle-project-name` | Project name | Yes |
-| `preferred-seeds` | Comma-separated list of preferred seeds | No |
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `radicle-identity-alias` | Alias for your Radicle identity | Yes | |
+| `radicle-identity-passphrase` | Passphrase for the identity (base64 encoded) | Yes | |
+| `radicle-identity-private-key` | Private key (base64 encoded) | Yes | |
+| `radicle-identity-public-key` | Public key (base64 encoded) | Yes | |
+| `radicle-repository-id` | Repository ID (rad:xxx) | Yes | |
+| `radicle-project-name` | Project name | Yes | |
+| `preferred-seeds` | Comma-separated list of preferred seeds | No | |
+| `git-user-name` | Git user name for merge commits | No | `Radicle Mirror Bot` |
+| `git-user-email` | Git user email for merge commits | No | `radicle-mirror@users.noreply.github.com` |
 
 ## How it Works
 

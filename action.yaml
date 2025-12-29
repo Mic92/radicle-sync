@@ -29,6 +29,14 @@ inputs:
     description: 'Comma-separated list of preferred seeds (e.g., nid@host:port,nid@host:port).'
     required: false
     default: ''
+  git-user-name:
+    description: 'Git user name for merge commits'
+    required: false
+    default: 'Radicle Mirror Bot'
+  git-user-email:
+    description: 'Git user email for merge commits'
+    required: false
+    default: 'radicle-mirror@users.noreply.github.com'
 
 runs:
   using: "composite"
@@ -110,6 +118,10 @@ runs:
         export GH_REPO_URL=$(echo "${{ github.repositoryUrl }}" | sed -e 's/git:\/\//https:\/\//g')
         git clone ${GH_REPO_URL} ${{ inputs.radicle-project-name }}
         cd ${{ inputs.radicle-project-name }}
+
+        # Configure git user for merge commits
+        git config user.name "${{ inputs.git-user-name }}"
+        git config user.email "${{ inputs.git-user-email }}"
 
         # Connect to the Radicle repository in storage
         rad init --existing "${{ inputs.radicle-repository-id }}" --no-confirm
