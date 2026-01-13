@@ -1,5 +1,14 @@
 # Radicle Sync
 
+> [!WARNING]
+> **This repository is deprecated.**
+>
+> As it turns out radicle's protocol,
+> doesn't play nicely together with
+> short-lived github actions, leading to the
+> repositories updates not beeing visible to
+> rest of the network.
+
 A GitHub Action that bidirectionally syncs your code with the [Radicle](https://radicle.xyz) peer-to-peer code hosting network.
 
 ## Features
